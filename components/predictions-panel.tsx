@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { TrendingUp } from "lucide-react"
+import { TrendingUp, Loader } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface Prediction {
   week: string
@@ -12,23 +13,68 @@ interface Prediction {
   change: string
 }
 
-const predictions: Prediction[] = [
-  { week: "Next week", revenue: "$52,000", change: "+8.2%" },
-  { week: "Week after", revenue: "$55,800", change: "+7.3%" },
-  { week: "Month end", revenue: "$62,400", change: "+11.8%" },
-]
-
 export default function PredictionsPanel() {
+  const [predictions, setPredictions] = useState<Prediction[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [simulationParams, setSimulationParams] = useState({
     adSpend: 50,
     pricing: 50,
     growthRate: 50,
   })
   const [simulated, setSimulated] = useState(false)
+  const [simulationLoading, setSimulationLoading] = useState(false)
 
-  const handleSimulation = () => {
-    setSimulated(true)
-    setTimeout(() => setSimulated(false), 2000)
+  useEffect(() => {
+    const fetchPredictions = async () => {
+      try {
+        setIsLoading(true)
+        const res = await fetch("/api/predictions")
+        if (!res.ok) throw new Error("Failed to fetch predictions")
+        const data = await res.json()
+        setPredictions(data.predictions || [])
+      } catch (err) {
+        console.error("[v0] Predictions error:", err)
+        setError(String(err))
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchPredictions()
+  }, [])
+
+  const handleSimulation = async () => {
+    setSimulationLoading(true)
+    try {
+      const res = await fetch("/api/predictions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "simulate",
+          params: simulationParams,
+        }),
+      })
+
+      if (!res.ok) throw new Error("Simulation failed")
+      setSimulated(true)
+      setTimeout(() => setSimulated(false), 3000)
+    } catch (err) {
+      console.error("[v0] Simulation error:", err)
+      setError(String(err))
+    } finally {
+      setSimulationLoading(false)
+    }
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          Error loading predictions: {error}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -42,27 +88,31 @@ export default function PredictionsPanel() {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-foreground">Revenue Predictions</h3>
           <div className="space-y-3">
-            {predictions.map((pred, index) => (
-              <motion.div
-                key={pred.week}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Card className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm font-medium text-slate-600">{pred.week}</p>
-                      <p className="text-xl font-bold text-blue-600 mt-1">{pred.revenue}</p>
-                    </div>
-                    <div className="flex items-center gap-1 text-green-600 font-semibold">
-                      <TrendingUp className="w-4 h-4" />
-                      {pred.change}
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+            {isLoading
+              ? Array(3)
+                  .fill(0)
+                  .map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)
+              : predictions.map((pred, index) => (
+                  <motion.div
+                    key={pred.week}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <Card className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-sm font-medium text-slate-600">{pred.week}</p>
+                          <p className="text-xl font-bold text-blue-600 mt-1">{pred.revenue}</p>
+                        </div>
+                        <div className="flex items-center gap-1 text-green-600 font-semibold">
+                          <TrendingUp className="w-4 h-4" />
+                          {pred.change}
+                        </div>
+                      </div>
+                    </Card>
+                  </motion.div>
+                ))}
           </div>
         </div>
 
@@ -117,9 +167,17 @@ export default function PredictionsPanel() {
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Button
                 onClick={handleSimulation}
+                disabled={simulationLoading}
                 className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold"
               >
-                Run Simulation
+                {simulationLoading ? (
+                  <>
+                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    Running Simulation...
+                  </>
+                ) : (
+                  "Run Simulation"
+                )}
               </Button>
             </motion.div>
 

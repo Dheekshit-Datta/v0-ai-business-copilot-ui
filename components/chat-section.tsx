@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Send, Loader, Paperclip, Mic, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,17 +18,51 @@ interface Message {
 const quickActions = ["Analyze business metrics", "Predict revenue trends", "Simulate strategy", "Compare performance"]
 
 export default function ChatSection() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "ai",
-      content:
-        "Hello! I'm Business Copilot, your AI business assistant. I can help you analyze metrics, predict trends, simulate strategies, and make data-driven decisions. What would you like to explore today?",
-      timestamp: new Date(),
-    },
-  ])
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const initializeChat = async () => {
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: "Give a brief greeting as Business Copilot AI assistant" }],
+          }),
+        })
+
+        if (!response.ok) throw new Error("Failed to initialize chat")
+        const data = await response.json()
+
+        setMessages([
+          {
+            id: "1",
+            role: "ai",
+            content: data.response || "Hello! I'm Business Copilot, your AI business assistant.",
+            timestamp: new Date(),
+          },
+        ])
+      } catch (err) {
+        console.error("[v0] Chat init error:", err)
+        setError("Failed to initialize chat")
+        setMessages([
+          {
+            id: "1",
+            role: "ai",
+            content: "Hello! I'm Business Copilot. How can I help you today?",
+            timestamp: new Date(),
+          },
+        ])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    initializeChat()
+  }, [])
 
   const handleSendMessage = async () => {
     if (!input.trim()) return
@@ -43,19 +77,43 @@ export default function ChatSection() {
     setMessages((prev) => [...prev, userMessage])
     setInput("")
     setIsLoading(true)
+    setError(null)
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map((m) => ({
+            role: m.role === "ai" ? "assistant" : "user",
+            content: m.content,
+          })),
+        }),
+      })
+
+      if (!response.ok) throw new Error("Failed to get response")
+      const data = await response.json()
+
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "ai",
-        content:
-          "Based on your business data, I can see some promising opportunities. Your revenue has grown by 15% this quarter, while operational costs have decreased by 8%. This indicates strong efficiency gains. Would you like me to analyze specific departments or forecast next quarter's performance?",
+        content: data.response || "I couldn't process that request. Please try again.",
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, aiMessage])
+    } catch (err) {
+      console.error("[v0] Chat error:", err)
+      setError(String(err))
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "ai",
+        content: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
   }
 
   return (
@@ -72,7 +130,7 @@ export default function ChatSection() {
           >
             {message.role === "ai" && (
               <Avatar className="w-8 h-8 flex-shrink-0">
-                <AvatarFallback className="bg-blue-600 text-white font-bold">CS</AvatarFallback>
+                <AvatarFallback className="bg-blue-600 text-white font-bold">BC</AvatarFallback>
               </Avatar>
             )}
             <div
@@ -95,13 +153,22 @@ export default function ChatSection() {
         {isLoading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
             <Avatar className="w-8 h-8 flex-shrink-0">
-              <AvatarFallback className="bg-blue-600 text-white font-bold">CS</AvatarFallback>
+              <AvatarFallback className="bg-blue-600 text-white font-bold">BC</AvatarFallback>
             </Avatar>
             <div className="bg-secondary px-4 py-3 rounded-lg rounded-bl-none flex gap-1">
               <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" />
               <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }} />
               <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
             </div>
+          </motion.div>
+        )}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+          >
+            Error: {error}
           </motion.div>
         )}
       </div>
@@ -139,7 +206,6 @@ export default function ChatSection() {
           </DropdownMenu>
         </div>
 
-        {/* Input and Action Buttons */}
         <div className="flex gap-2 items-end">
           <Input
             value={input}

@@ -1,47 +1,87 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import MetricCard from "./metric-card"
 import ChartCard from "./chart-card"
+import { Skeleton } from "@/components/ui/skeleton"
 
-const metricsData = [
-  { title: "Total Sales", value: "$45,000", change: "+12%", isPositive: true },
-  { title: "Profit Margin", value: "$9,000", change: "-3%", isPositive: false },
-  { title: "Ad Spend Efficiency", value: "3.2x", change: "+8%", isPositive: true },
-  { title: "Growth Rate", value: "+24%", change: "+5%", isPositive: true },
-]
+interface MetricData {
+  title: string
+  value: string
+  change: string
+  isPositive: boolean
+}
 
-const chartData = [
-  { name: "Mon", sales: 4000, expenses: 2400 },
-  { name: "Tue", sales: 3000, expenses: 1398 },
-  { name: "Wed", sales: 2000, expenses: 9800 },
-  { name: "Thu", sales: 2780, expenses: 3908 },
-  { name: "Fri", sales: 1890, expenses: 4800 },
-  { name: "Sat", sales: 2390, expenses: 3800 },
-  { name: "Sun", sales: 3490, expenses: 4300 },
-]
-
-const forecastData = [
-  { name: "Week 1", revenue: 45000 },
-  { name: "Week 2", revenue: 48600 },
-  { name: "Week 3", revenue: 52000 },
-  { name: "Week 4", revenue: 55800 },
-]
+interface ChartDataPoint {
+  name: string
+  [key: string]: string | number
+}
 
 export default function Dashboard() {
+  const [metrics, setMetrics] = useState<MetricData[]>([])
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true)
+        const [analyticsRes, chartsRes] = await Promise.all([fetch("/api/analytics"), fetch("/api/charts")])
+
+        if (!analyticsRes.ok || !chartsRes.ok) throw new Error("Failed to fetch data")
+
+        const analyticsData = await analyticsRes.json()
+        const chartsDataRes = await chartsRes.json()
+
+        setMetrics(analyticsData.metrics || [])
+        setChartData(chartsDataRes.chartData || [])
+      } catch (err) {
+        console.error("[v0] Dashboard error:", err)
+        setError(String(err))
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (error) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          Error loading dashboard: {error}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground mb-4">Dashboard</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {metricsData.map((metric, index) => (
-            <MetricCard key={metric.title} {...metric} delay={index * 0.1} />
-          ))}
+          {isLoading
+            ? Array(4)
+                .fill(0)
+                .map((_, i) => <Skeleton key={i} className="h-32 rounded-lg" />)
+            : metrics.map((metric, index) => <MetricCard key={metric.title} {...metric} delay={index * 0.1} />)}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard title="Sales vs Expenses" type="bar" data={chartData} dataKey="sales" delay={0.4} />
-        <ChartCard title="Revenue Forecast" type="line" data={forecastData} dataKey="revenue" delay={0.5} />
+        {isLoading ? (
+          <>
+            <Skeleton className="h-80 rounded-lg" />
+            <Skeleton className="h-80 rounded-lg" />
+          </>
+        ) : (
+          <>
+            <ChartCard title="Sales vs Expenses" type="bar" data={chartData} dataKey="sales" delay={0.4} />
+            <ChartCard title="Revenue Forecast" type="line" data={chartData} dataKey="revenue" delay={0.5} />
+          </>
+        )}
       </div>
     </div>
   )
