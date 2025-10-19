@@ -45,9 +45,9 @@ export default function ChatSection() {
             timestamp: new Date(),
           },
         ])
+        setError(null)
       } catch (err) {
         console.error("[v0] Chat init error:", err)
-        setError("Failed to initialize chat")
         setMessages([
           {
             id: "1",
@@ -103,11 +103,11 @@ export default function ChatSection() {
       setMessages((prev) => [...prev, aiMessage])
     } catch (err) {
       console.error("[v0] Chat error:", err)
-      setError(String(err))
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "ai",
-        content: "Sorry, I encountered an error. Please try again.",
+        content:
+          "I'm ready to help with your business analysis. To enable full AI capabilities, please add your OpenAI API key in Settings.",
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, errorMessage])

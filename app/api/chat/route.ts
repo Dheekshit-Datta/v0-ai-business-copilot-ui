@@ -3,13 +3,13 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages, businessContext } = await request.json()
+    const { messages, businessContext, openaiApiKey } = await request.json()
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages format" }, { status: 400 })
     }
 
-    const response = await callLLM(messages, businessContext)
+    const response = await callLLM(messages, businessContext, openaiApiKey)
 
     return NextResponse.json({ response })
   } catch (error) {

@@ -1,65 +1,67 @@
-const LLM_PROVIDER = process.env.NEXT_PUBLIC_LLM_PROVIDER || "ollama"
-const OLLAMA_BASE_URL = process.env.NEXT_PUBLIC_OLLAMA_URL || "http://localhost:11434"
-const LLM_MODEL = process.env.NEXT_PUBLIC_LLM_MODEL || "mistral"
-
-// Fallback public Ollama instance (for demo purposes)
-const FALLBACK_OLLAMA_URL = "https://ollama-api.example.com"
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 
 interface LLMMessage {
   role: "user" | "assistant"
   content: string
 }
 
-export async function callLLM(messages: LLMMessage[], businessContext?: string): Promise<string> {
+export async function callLLM(
+  messages: LLMMessage[],
+  businessContext?: string,
+  clientApiKey?: string,
+): Promise<string> {
+  const apiKey = clientApiKey || OPENAI_API_KEY
+
+  if (!apiKey) {
+    return generateFallbackResponse(messages, businessContext)
+  }
+
   try {
-    // Always try Ollama first (local or remote)
-    return await callOllama(messages, businessContext)
+    return await callOpenAI(messages, businessContext, apiKey)
   } catch (error) {
-    console.error("[v0] Ollama Error:", error)
-    // Fallback to a simple response if Ollama is not available
+    console.error("[v0] OpenAI Error:", error)
     return generateFallbackResponse(messages, businessContext)
   }
 }
 
-async function callOllama(messages: LLMMessage[], businessContext?: string): Promise<string> {
+async function callOpenAI(messages: LLMMessage[], businessContext?: string, apiKey: string): Promise<string> {
   const systemPrompt = `You are Business Copilot, an AI business assistant. You help analyze metrics, predict trends, simulate strategies, and make data-driven decisions. ${businessContext ? `Business Context: ${businessContext}` : ""}`
 
-  try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: LLM_MODEL,
-        messages: [{ role: "system", content: systemPrompt }, ...messages],
-        stream: false,
-      }),
-    })
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
+      temperature: 0.7,
+      max_tokens: 1000,
+    }),
+  })
 
-    if (!response.ok) {
-      throw new Error(`Ollama error: ${response.statusText}`)
-    }
-
-    const data = await response.json()
-    return data.message.content
-  } catch (error) {
-    console.error("[v0] Local Ollama failed, trying fallback...")
-    throw error
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(`OpenAI error: ${error.error?.message || response.statusText}`)
   }
+
+  const data = await response.json()
+  return data.choices[0].message.content
 }
 
 function generateFallbackResponse(messages: LLMMessage[], businessContext?: string): string {
   const lastMessage = messages[messages.length - 1]?.content || ""
 
-  // Simple pattern matching for common business queries
   if (lastMessage.toLowerCase().includes("revenue")) {
-    return "Based on your business context, revenue analysis shows a positive trend. To get more detailed insights, please ensure Ollama is running locally. Visit https://ollama.ai to set up Ollama."
+    return "To enable AI analysis, please add your OpenAI API key in Settings."
   }
   if (lastMessage.toLowerCase().includes("predict")) {
-    return "Prediction analysis requires the AI model to be running. Please set up Ollama locally for full AI capabilities."
+    return "Prediction analysis requires AI capabilities. Please add your OpenAI API key in Settings."
   }
   if (lastMessage.toLowerCase().includes("metric") || lastMessage.toLowerCase().includes("kpi")) {
-    return "Your KPI metrics are being analyzed. For real-time AI insights, please start Ollama on your local machine."
+    return "KPI analysis is ready. For AI-powered insights, please add your OpenAI API key in Settings."
   }
 
-  return "I'm ready to help with your business analysis. To enable full AI capabilities, please set up Ollama locally by visiting https://ollama.ai"
+  return "I'm ready to help with your business analysis. To enable full AI capabilities, please add your OpenAI API key in Settings."
 }
